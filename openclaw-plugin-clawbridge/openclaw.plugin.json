@@ -1,0 +1,138 @@
+{
+  "id": "clawbridge",
+  "name": "ClawBridge",
+  "description": "Connects OpenClaw to ClawCore and ClawBridge through a custom channel.",
+  "version": "0.1.0",
+  "activation": {
+    "onStartup": false
+  },
+  "channels": [
+    "clawbridge"
+  ],
+  "channelEnvVars": {
+    "clawbridge": [
+      "CLAWCORE_OPENCLAW_TOKEN"
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "channelConfigs": {
+    "clawbridge": {
+      "label": "ClawBridge",
+      "description": "ClawCore WebSocket bridge for ClawPro custom channels.",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "serverUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "webSocketUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "botId": {
+            "type": "string"
+          },
+          "botToken": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "defaultTo": {
+            "type": "string"
+          },
+          "allowFrom": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reconnectMs": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 60000
+          },
+          "accounts": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "serverUrl": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "webSocketUrl": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "botId": {
+                  "type": "string"
+                },
+                "botToken": {
+                  "type": "string"
+                },
+                "agentId": {
+                  "type": "string"
+                },
+                "defaultTo": {
+                  "type": "string"
+                },
+                "allowFrom": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "reconnectMs": {
+                  "type": "integer",
+                  "minimum": 100,
+                  "maximum": 60000
+                }
+              }
+            }
+          },
+          "defaultAccount": {
+            "type": "string"
+          }
+        }
+      },
+      "uiHints": {
+        "serverUrl": {
+          "label": "ClawCore Server URL",
+          "placeholder": "https://example.com"
+        },
+        "webSocketUrl": {
+          "label": "ClawCore WebSocket URL",
+          "placeholder": "wss://example.com/ws/openclaw"
+        },
+        "botToken": {
+          "label": "Bot token",
+          "sensitive": true
+        }
+      }
+    }
+  }
+}

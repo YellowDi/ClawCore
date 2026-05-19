@@ -1,0 +1,9 @@
+export declare const CHANNEL_ID = "clawbridge";
+export declare const CHANNEL_LABEL = "ClawBridge";
+export declare const DEFAULT_ACCOUNT_ID = "default";
+export declare const DEFAULT_CONVERSATION_ID = "main";
+export declare const DEFAULT_RECONNECT_MS = 1500;
+export declare const CLAWCORE_READY_TYPE = "connection.ready";
+export declare const CLAWCORE_USER_MESSAGE_TYPE = "user.message";
+export declare const CLAWCORE_ASSISTANT_MESSAGE_TYPE = "assistant.message";
+export declare const CLAWCORE_ERROR_TYPE = "error";

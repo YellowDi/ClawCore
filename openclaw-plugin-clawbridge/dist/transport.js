@@ -1,0 +1,133 @@
+import { Buffer } from "node:buffer";
+import { CLAWCORE_ASSISTANT_MESSAGE_TYPE } from "./constants.js";
+/** 创建连接 ClawCore OpenClaw 入口的 WebSocket，鉴权参数放在查询串中。 */
+export function createClawCoreWebSocket(account) {
+    const url = new URL(account.webSocketUrl);
+    url.searchParams.set("bot_id", account.botId);
+    url.searchParams.set("account_id", account.accountId);
+    url.searchParams.set("token", account.botToken);
+    return new WebSocket(url);
+}
+/** 通过 HTTP 回调把 OpenClaw 回复投递给 ClawCore。 */
+export async function sendClawCoreReply(params) {
+    const response = await fetch(`${params.account.serverUrl}/api/openclaw/messages`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${params.account.botToken}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+        },
+        body: JSON.stringify({
+            type: CLAWCORE_ASSISTANT_MESSAGE_TYPE,
+            conversationId: params.message.conversationId,
+            replyTo: params.message.replyTo,
+            messageId: params.message.messageId,
+            text: params.message.text,
+            state: params.message.state,
+        }),
+    });
+    if (!response.ok) {
+        throw new Error(`ClawCore reply failed: ${response.status} ${await response.text()}`);
+    }
+}
+/** 兼容 Node WebSocket 可能返回的字符串、Buffer、ArrayBuffer 或 Blob。 */
+export async function decodeSocketData(data) {
+    if (typeof data === "string") {
+        return data;
+    }
+    if (data instanceof ArrayBuffer) {
+        return Buffer.from(data).toString("utf8");
+    }
+    if (ArrayBuffer.isView(data)) {
+        return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString("utf8");
+    }
+    if (data instanceof Blob) {
+        return await data.text();
+    }
+    return String(data ?? "");
+}
+/** 从 OpenClaw 回复 payload 中提取当前 ClawBridge 支持的文本内容。 */
+export function extractReplyText(payload) {
+    return typeof payload.text === "string" ? payload.text : "";
+}
+/** 生成跨 chunk 稳定可追踪的消息 ID。 */
+export function createMessageId(prefix = "clawbridge") {
+    if (typeof globalThis.crypto?.randomUUID === "function") {
+        return `${prefix}-${globalThis.crypto.randomUUID()}`;
+    }
+    return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+/** 等待一段可被 AbortSignal 中断的延迟，用于重连退避。 */
+export function wait(ms, signal) {
+    if (signal.aborted) {
+        return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+        const done = () => {
+            clearTimeout(timer);
+            signal.removeEventListener("abort", abort);
+            resolve();
+        };
+        const abort = () => done();
+        const timer = setTimeout(done, ms);
+        signal.addEventListener("abort", abort, { once: true });
+    });
+}
+/** 等待 WebSocket 进入 open 状态，连接失败或提前关闭时返回错误。 */
+export function waitForSocketOpen(socket, signal) {
+    if (socket.readyState === WebSocket.OPEN) {
+        return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+        const cleanup = () => {
+            signal.removeEventListener("abort", abort);
+            socket.removeEventListener("open", open);
+            socket.removeEventListener("error", error);
+            socket.removeEventListener("close", close);
+        };
+        const open = () => {
+            cleanup();
+            resolve();
+        };
+        const error = () => {
+            cleanup();
+            reject(new Error("ClawCore WebSocket open failed"));
+        };
+        const close = () => {
+            cleanup();
+            reject(new Error("ClawCore WebSocket closed before opening"));
+        };
+        const abort = () => {
+            cleanup();
+            socket.close();
+            resolve();
+        };
+        signal.addEventListener("abort", abort, { once: true });
+        socket.addEventListener("open", open, { once: true });
+        socket.addEventListener("error", error, { once: true });
+        socket.addEventListener("close", close, { once: true });
+    });
+}
+/** 等待 WebSocket 关闭；外部 abort 时主动关闭连接。 */
+export function waitForSocketClose(socket, signal) {
+    return new Promise((resolve) => {
+        const cleanup = () => {
+            signal.removeEventListener("abort", abort);
+            socket.removeEventListener("close", close);
+            socket.removeEventListener("error", close);
+        };
+        const close = () => {
+            cleanup();
+            resolve();
+        };
+        const abort = () => {
+            cleanup();
+            socket.close();
+            resolve();
+        };
+        signal.addEventListener("abort", abort, { once: true });
+        socket.addEventListener("close", close, { once: true });
+        socket.addEventListener("error", close, { once: true });
+    });
+}
+//# sourceMappingURL=transport.js.map
