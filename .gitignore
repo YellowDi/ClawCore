@@ -3,3 +3,5 @@
 .gocache/
 /clawcore
 /clawmock
+/openclaw-workspace/
+/openclaw-gateway-clawbridge.*
