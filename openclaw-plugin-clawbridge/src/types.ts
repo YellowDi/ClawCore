@@ -1,12 +1,11 @@
-import type { OpenClawConfig } from "openclaw/plugin-sdk/core";
+import type { OpenClawConfig } from "openclaw/plugin-sdk/channel-core";
 
 export type ClawBridgeAccountConfig = {
   name?: string;
   enabled?: boolean;
   serverUrl?: string;
-  webSocketUrl?: string;
-  botId?: string;
-  botToken?: string;
+  wsUrl?: string;
+  token?: string;
   agentId?: string;
   defaultTo?: string;
   allowFrom?: string[];
@@ -24,9 +23,8 @@ export type ResolvedClawBridgeAccount = {
   enabled: boolean;
   configured: boolean;
   serverUrl: string;
-  webSocketUrl: string;
-  botId: string;
-  botToken: string;
+  wsUrl: string;
+  token: string;
   agentId?: string;
   defaultTo: string;
   allowFrom: string[];
@@ -54,4 +52,6 @@ export type ClawCoreAssistantMessage = {
   messageId: string;
   text: string;
   state: "delta" | "final" | "error";
+  createdAt?: string;
+  metadata?: Record<string, unknown>;
 };

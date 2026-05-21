@@ -2,7 +2,7 @@ import { CLAWCORE_ERROR_TYPE, CLAWCORE_READY_TYPE, CLAWCORE_USER_MESSAGE_TYPE, }
 import { resolveClawBridgeAccount } from "./config.js";
 import { handleClawCoreUserMessage } from "./inbound.js";
 import { createClawCoreWebSocket, createMessageId, decodeSocketData, sendClawCoreReply, wait, waitForSocketClose, waitForSocketOpen, } from "./transport.js";
-/** 启动 OpenClaw 账号网关，保持到 ClawCore `/ws/openclaw` 的长连接。 */
+/** 启动 channel 账号网关，保持到 ClawCore/IM `/ws/channel` 的长连接。 */
 export async function startClawBridgeGatewayAccount(ctx) {
     const account = resolveClawBridgeAccount({
         cfg: ctx.cfg,
@@ -75,7 +75,7 @@ async function handleSocketMessage(params) {
         return;
     }
     if (frame.type === CLAWCORE_READY_TYPE) {
-        params.ctx.log?.info?.(`[${params.account.accountId}] connected to ClawCore`);
+        params.ctx.log?.info?.(`[${params.account.accountId}] connected to ClawCore channel`);
         return;
     }
     if (frame.type === CLAWCORE_ERROR_TYPE) {
@@ -86,7 +86,7 @@ async function handleSocketMessage(params) {
         await dispatchUserMessage(params, frame);
     }
 }
-/** 将 ClawCore 推来的用户消息交给 OpenClaw turn kernel，并把失败显式回传给浏览器。 */
+/** 将 ClawCore/IM 推来的用户消息交给 OpenClaw turn kernel，并把失败显式回传给浏览器。 */
 async function dispatchUserMessage(params, message) {
     try {
         params.ctx.setStatus({
@@ -136,8 +136,7 @@ function requireChannelRuntime(value) {
     const runtime = value;
     if (!runtime?.reply ||
         !runtime.routing ||
-        !runtime.session ||
-        !runtime.turn) {
+        !runtime.session) {
         throw new Error("OpenClaw channelRuntime is required for ClawBridge inbound dispatch");
     }
     return runtime;

@@ -1,19 +1,19 @@
 import { Buffer } from "node:buffer";
-import { CLAWCORE_ASSISTANT_MESSAGE_TYPE } from "./constants.js";
-/** 创建连接 ClawCore OpenClaw 入口的 WebSocket，鉴权参数放在查询串中。 */
+import { CHANNEL_ID, CLAWCORE_ASSISTANT_MESSAGE_TYPE } from "./constants.js";
+/** 创建连接 ClawCore/IM channel 入口的 WebSocket，鉴权参数放在查询串中。 */
 export function createClawCoreWebSocket(account) {
-    const url = new URL(account.webSocketUrl);
-    url.searchParams.set("bot_id", account.botId);
+    const url = new URL(account.wsUrl);
+    url.searchParams.set("channel_id", CHANNEL_ID);
     url.searchParams.set("account_id", account.accountId);
-    url.searchParams.set("token", account.botToken);
+    url.searchParams.set("token", account.token);
     return new WebSocket(url);
 }
-/** 通过 HTTP 回调把 OpenClaw 回复投递给 ClawCore。 */
+/** 通过 HTTP 回调把 channel 回复投递给 ClawCore/IM。 */
 export async function sendClawCoreReply(params) {
-    const response = await fetch(`${params.account.serverUrl}/api/openclaw/messages`, {
+    const response = await fetch(`${params.account.serverUrl}/api/channels/${CHANNEL_ID}/messages`, {
         method: "POST",
         headers: {
-            Authorization: `Bearer ${params.account.botToken}`,
+            Authorization: `Bearer ${params.account.token}`,
             "Content-Type": "application/json",
             Accept: "application/json",
         },
@@ -24,6 +24,8 @@ export async function sendClawCoreReply(params) {
             messageId: params.message.messageId,
             text: params.message.text,
             state: params.message.state,
+            createdAt: params.message.createdAt,
+            metadata: params.message.metadata,
         }),
     });
     if (!response.ok) {
@@ -46,7 +48,7 @@ export async function decodeSocketData(data) {
     }
     return String(data ?? "");
 }
-/** 从 OpenClaw 回复 payload 中提取当前 ClawBridge 支持的文本内容。 */
+/** 从 OpenClaw 回复 payload 中提取当前 ClawBridge channel 支持的文本内容。 */
 export function extractReplyText(payload) {
     return typeof payload.text === "string" ? payload.text : "";
 }

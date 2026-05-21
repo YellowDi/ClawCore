@@ -29,12 +29,12 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
-func TestOpenClawHTTPRequiresToken(t *testing.T) {
-	server := NewServer(Config{OpenClawToken: "secret", AllowedOrigins: []string{"*"}}, nil)
+func TestChannelHTTPRequiresToken(t *testing.T) {
+	server := NewServer(Config{ChannelToken: "secret", AllowedOrigins: []string{"*"}}, nil)
 	ts := httptest.NewServer(server.Handler())
 	defer ts.Close()
 
-	resp, err := http.Post(ts.URL+"/api/openclaw/messages", "application/json", strings.NewReader(`{}`))
+	resp, err := http.Post(ts.URL+"/api/channels/clawbridge/messages", "application/json", strings.NewReader(`{}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,10 +45,10 @@ func TestOpenClawHTTPRequiresToken(t *testing.T) {
 	}
 }
 
-func TestOpenClawHTTPBroadcastsToBrowser(t *testing.T) {
+func TestChannelHTTPBroadcastsToBrowser(t *testing.T) {
 	server := NewServer(Config{
 		BridgeToken:    "bridge",
-		OpenClawToken:  "openclaw",
+		ChannelToken:   "channel",
 		AllowedOrigins: []string{"*"},
 	}, nil)
 	ts := httptest.NewServer(server.Handler())
@@ -69,11 +69,11 @@ func TestOpenClawHTTPBroadcastsToBrowser(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	payload := OpenClawMessage{
+	payload := ChannelMessage{
 		ConversationID: "main",
 		ReplyTo:        "user-1",
 		MessageID:      "assistant-1",
-		Text:           "hello from openclaw",
+		Text:           "hello from channel",
 		State:          StateFinal,
 	}
 	body, err := json.Marshal(payload)
@@ -81,12 +81,12 @@ func TestOpenClawHTTPBroadcastsToBrowser(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ts.URL+"/api/openclaw/messages", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ts.URL+"/api/channels/clawbridge/messages", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer openclaw")
+	req.Header.Set("Authorization", "Bearer channel")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -107,15 +107,15 @@ func TestOpenClawHTTPBroadcastsToBrowser(t *testing.T) {
 	if err := json.Unmarshal(data, &message); err != nil {
 		t.Fatal(err)
 	}
-	if message.Type != MessageTypeAssistant || message.Text != "hello from openclaw" {
+	if message.Type != MessageTypeAssistant || message.Text != "hello from channel" {
 		t.Fatalf("unexpected browser message: %#v", message)
 	}
 }
 
-func TestBrowserMessageRoutesToOpenClaw(t *testing.T) {
+func TestBrowserMessageRoutesToChannel(t *testing.T) {
 	server := NewServer(Config{
 		BridgeToken:    "bridge",
-		OpenClawToken:  "openclaw",
+		ChannelToken:   "channel",
 		AllowedOrigins: []string{"*"},
 	}, nil)
 	ts := httptest.NewServer(server.Handler())
@@ -124,13 +124,13 @@ func TestBrowserMessageRoutesToOpenClaw(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	openClawWS := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/openclaw?token=openclaw"
-	openClawConn, _, err := websocket.Dial(ctx, openClawWS, nil)
+	channelWS := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/channel?channel_id=clawbridge&account_id=default&token=channel"
+	channelConn, _, err := websocket.Dial(ctx, channelWS, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer openClawConn.Close(websocket.StatusNormalClosure, "test done")
-	_, _, err = openClawConn.Read(ctx) // 读取 connection.ready
+	defer channelConn.Close(websocket.StatusNormalClosure, "test done")
+	_, _, err = channelConn.Read(ctx) // 读取 connection.ready
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,12 +160,12 @@ func TestBrowserMessageRoutesToOpenClaw(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, data, err := openClawConn.Read(ctx)
+	_, data, err := channelConn.Read(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var routed OpenClawMessage
+	var routed ChannelMessage
 	if err := json.Unmarshal(data, &routed); err != nil {
 		t.Fatal(err)
 	}

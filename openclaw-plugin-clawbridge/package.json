@@ -2,7 +2,7 @@
   "name": "@clawcore/openclaw-clawbridge",
   "version": "0.1.0",
   "private": true,
-  "description": "OpenClaw channel plugin for the ClawCore ClawBridge transport",
+  "description": "OpenClaw channel plugin for the ClawPro IM ClawBridge transport",
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
@@ -18,7 +18,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "peerDependencies": {
-    "openclaw": ">=2026.5.18"
+    "openclaw": "2026.4.23"
   },
   "peerDependenciesMeta": {
     "openclaw": {
@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
-    "openclaw": "2026.5.18",
+    "openclaw": "2026.4.23",
     "typescript": "^5.9.3"
   },
   "openclaw": {
@@ -43,10 +43,10 @@
       "id": "clawbridge",
       "label": "ClawBridge",
       "selectionLabel": "ClawBridge",
-      "detailLabel": "ClawCore Bridge",
+      "detailLabel": "ClawPro IM Channel",
       "docsPath": "/channels/clawbridge",
       "docsLabel": "clawbridge",
-      "blurb": "ClawCore WebSocket bridge for ClawPro custom channels.",
+      "blurb": "ClawPro IM channel over ClawCore serverUrl/wsUrl.",
       "systemImage": "bubble.left.and.bubble.right",
       "markdownCapable": true,
       "preferSessionLookupForAnnounceTarget": true,

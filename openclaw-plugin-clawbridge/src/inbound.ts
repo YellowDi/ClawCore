@@ -1,5 +1,5 @@
-import { createChannelMessageReplyPipeline } from "openclaw/plugin-sdk/channel-message";
-import type { PluginRuntime } from "openclaw/plugin-sdk/core";
+import { dispatchInboundDirectDmWithRuntime } from "openclaw/plugin-sdk/direct-dm";
+import type { OpenClawConfig, PluginRuntime } from "openclaw/plugin-sdk/channel-core";
 
 import { CHANNEL_ID, CHANNEL_LABEL } from "./constants.js";
 import { createMessageId, extractReplyText, sendClawCoreReply } from "./transport.js";
@@ -7,9 +7,9 @@ import type { ClawCoreUserMessage, ResolvedClawBridgeAccount } from "./types.js"
 
 type ChannelRuntime = PluginRuntime["channel"];
 
-/** 把 ClawCore 用户消息转换成 OpenClaw 入站上下文，并执行一次 agent turn。 */
+/** 把 ClawCore/IM 用户消息转换成 OpenClaw channel 入站上下文，并执行一次 agent turn。 */
 export async function handleClawCoreUserMessage(params: {
-  cfg: Parameters<ChannelRuntime["routing"]["resolveAgentRoute"]>[0]["cfg"];
+  cfg: OpenClawConfig;
   runtime: ChannelRuntime;
   account: ResolvedClawBridgeAccount;
   message: ClawCoreUserMessage;
@@ -21,101 +21,73 @@ export async function handleClawCoreUserMessage(params: {
 
   const conversationId = params.message.conversationId?.trim() || params.account.defaultTo;
   const senderName = readStringMetadata(params.message.metadata, "senderName") ?? "ClawBridge User";
-  const route = resolveRoute({
-    runtime: params.runtime,
-    cfg: params.cfg,
-    account: params.account,
-    conversationId,
-  });
-  const storePath = params.runtime.session.resolveStorePath(params.cfg.session?.store, {
-    agentId: route.agentId,
-  });
-  const previousTimestamp = params.runtime.session.readSessionUpdatedAt({
-    storePath,
-    sessionKey: route.sessionKey,
-  });
-  const timestamp = parseTimestamp(params.message.createdAt);
-  const body = params.runtime.reply.formatAgentEnvelope({
-    channel: CHANNEL_LABEL,
-    from: senderName,
-    timestamp,
-    previousTimestamp,
-    envelope: params.runtime.reply.resolveEnvelopeFormatOptions(params.cfg),
-    body: text,
-  });
-  const ctxPayload = params.runtime.reply.finalizeInboundContext({
-    Body: body,
-    BodyForAgent: text,
-    RawBody: text,
-    CommandBody: text,
-    From: conversationId,
-    To: conversationId,
-    SessionKey: route.sessionKey,
-    AccountId: route.accountId ?? params.account.accountId,
-    ChatType: "direct",
-    ConversationLabel: conversationId,
-    SenderName: senderName,
-    SenderId: readStringMetadata(params.message.metadata, "senderId") ?? "clawbridge-user",
-    Provider: CHANNEL_ID,
-    Surface: CHANNEL_LABEL,
-    MessageSid: params.message.id,
-    MessageSidFull: params.message.id,
-    ReplyToId: params.message.id,
-    Timestamp: timestamp?.getTime(),
-    OriginatingChannel: CHANNEL_ID,
-    OriginatingTo: conversationId,
-    CommandAuthorized: true,
-  });
-  const replyPipeline = createChannelMessageReplyPipeline({
-    cfg: params.cfg,
-    agentId: route.agentId,
-    channel: CHANNEL_ID,
-    accountId: params.account.accountId,
-  });
   const assistantMessageId = createMessageId("clawbridge-in");
 
-  await params.runtime.turn.runPrepared({
+  await dispatchInboundDirectDmWithRuntime({
+    cfg: params.cfg,
+    runtime: createDirectDmRuntime({
+      runtime: params.runtime,
+      cfg: params.cfg,
+      account: params.account,
+      conversationId,
+    }),
     channel: CHANNEL_ID,
     accountId: params.account.accountId,
-    routeSessionKey: route.sessionKey,
-    storePath,
-    ctxPayload,
-    recordInboundSession: params.runtime.session.recordInboundSession,
-    runDispatch: async () =>
-      await params.runtime.reply.dispatchReplyWithBufferedBlockDispatcher({
-        ctx: ctxPayload,
-        cfg: params.cfg,
-        dispatcherOptions: {
-          ...replyPipeline,
-          deliver: async (payload, info) => {
-            const replyText = extractReplyText(payload);
-            if (!replyText.trim()) {
-              return;
-            }
-            await sendClawCoreReply({
-              account: params.account,
-              message: {
-                conversationId,
-                replyTo: params.message.id,
-                messageId: assistantMessageId,
-                text: replyText,
-                state: payload.isError ? "error" : info.kind === "final" ? "final" : "delta",
-              },
-            });
-          },
-          onError: (error) => {
-            throw error instanceof Error
-              ? error
-              : new Error(`ClawBridge dispatch failed: ${String(error)}`);
+    channelLabel: CHANNEL_LABEL,
+    peer: {
+      kind: "direct",
+      id: conversationId,
+    },
+    senderId: readStringMetadata(params.message.metadata, "senderId") ?? "clawbridge-user",
+    senderAddress: conversationId,
+    recipientAddress: conversationId,
+    conversationLabel: senderName,
+    rawBody: text,
+    bodyForAgent: text,
+    commandBody: text,
+    messageId: params.message.id,
+    timestamp: parseTimestampMs(params.message.createdAt),
+    commandAuthorized: true,
+    // OpenClaw 2026.4.23 的入站上下文仍保留 legacy Provider 字段；这里始终填 channel id。
+    provider: CHANNEL_ID,
+    surface: CHANNEL_ID,
+    originatingChannel: CHANNEL_ID,
+    originatingTo: conversationId,
+    extraContext: {
+      SenderName: senderName,
+      ReplyToId: params.message.id,
+      ReplyToIdFull: params.message.id,
+    },
+    deliver: async (payload) => {
+      const replyText = extractReplyText(payload);
+      if (!replyText.trim()) {
+        return;
+      }
+      await sendClawCoreReply({
+        account: params.account,
+        message: {
+          conversationId,
+          replyTo: params.message.id,
+          messageId: assistantMessageId,
+          text: replyText,
+          state: "final",
+          createdAt: new Date().toISOString(),
+          metadata: {
+            channelId: CHANNEL_ID,
+            accountId: params.account.accountId,
           },
         },
-      }),
-    record: {
-      onRecordError: (error) => {
-        throw error instanceof Error
-          ? error
-          : new Error(`ClawBridge session record failed: ${String(error)}`);
-      },
+      });
+    },
+    onRecordError: (error) => {
+      throw error instanceof Error
+        ? error
+        : new Error(`ClawBridge session record failed: ${String(error)}`);
+    },
+    onDispatchError: (error) => {
+      throw error instanceof Error
+        ? error
+        : new Error(`ClawBridge dispatch failed: ${String(error)}`);
     },
   });
 }
@@ -123,7 +95,7 @@ export async function handleClawCoreUserMessage(params: {
 /** 使用 OpenClaw 路由规则选择 agent；账号可显式覆盖默认 agentId。 */
 function resolveRoute(params: {
   runtime: ChannelRuntime;
-  cfg: Parameters<ChannelRuntime["routing"]["resolveAgentRoute"]>[0]["cfg"];
+  cfg: OpenClawConfig;
   account: ResolvedClawBridgeAccount;
   conversationId: string;
 }) {
@@ -154,15 +126,38 @@ function resolveRoute(params: {
   };
 }
 
+function createDirectDmRuntime(params: {
+  runtime: ChannelRuntime;
+  cfg: OpenClawConfig;
+  account: ResolvedClawBridgeAccount;
+  conversationId: string;
+}) {
+  return {
+    channel: {
+      routing: {
+        resolveAgentRoute: () =>
+          resolveRoute({
+            runtime: params.runtime,
+            cfg: params.cfg,
+            account: params.account,
+            conversationId: params.conversationId,
+          }),
+      },
+      session: params.runtime.session,
+      reply: params.runtime.reply,
+    },
+  };
+}
+
 function readStringMetadata(metadata: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = metadata?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function parseTimestamp(value: string | undefined): Date | undefined {
+function parseTimestampMs(value: string | undefined): number | undefined {
   if (!value) {
     return undefined;
   }
   const ms = Date.parse(value);
-  return Number.isFinite(ms) ? new Date(ms) : undefined;
+  return Number.isFinite(ms) ? ms : undefined;
 }

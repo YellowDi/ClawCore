@@ -9,7 +9,7 @@ import (
 type Config struct {
 	Addr           string
 	BridgeToken    string
-	OpenClawToken  string
+	ChannelToken   string
 	AllowedOrigins []string
 }
 
@@ -18,7 +18,7 @@ func LoadConfigFromEnv() Config {
 	cfg := Config{
 		Addr:           envOrDefault("CLAWCORE_ADDR", ":8080"),
 		BridgeToken:    strings.TrimSpace(os.Getenv("CLAWCORE_BRIDGE_TOKEN")),
-		OpenClawToken:  strings.TrimSpace(os.Getenv("CLAWCORE_OPENCLAW_TOKEN")),
+		ChannelToken:   strings.TrimSpace(os.Getenv("CLAWCORE_CHANNEL_TOKEN")),
 		AllowedOrigins: parseList(os.Getenv("CLAWCORE_ALLOWED_ORIGINS")),
 	}
 	if len(cfg.AllowedOrigins) == 0 {

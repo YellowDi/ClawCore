@@ -13,7 +13,10 @@ import (
 	"github.com/coder/websocket"
 )
 
-const defaultConversationID = "main"
+const (
+	defaultConversationID = "main"
+	channelID             = "clawbridge"
+)
 
 // Server 封装 ClawCore 的 HTTP 路由、连接中心和日志输出。
 type Server struct {
@@ -42,8 +45,8 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /ws/browser", s.handleBrowserWebSocket)
-	mux.HandleFunc("GET /ws/openclaw", s.handleOpenClawWebSocket)
-	mux.HandleFunc("POST /api/openclaw/messages", s.handleOpenClawMessage)
+	mux.HandleFunc("GET /ws/channel", s.handleChannelWebSocket)
+	mux.HandleFunc("POST /api/channels/{channelID}/messages", s.handleChannelMessage)
 	return s.withAccessLog(mux)
 }
 
@@ -84,7 +87,7 @@ func (s *Server) handleBrowserWebSocket(w http.ResponseWriter, r *http.Request) 
 	go client.WriteLoop(ctx)
 
 	// ClawBridge 收到 connection.ready 后，才允许输入框发送 user.message。
-	client.Send(mustJSON(OpenClawMessage{
+	client.Send(mustJSON(ChannelMessage{
 		Type:           MessageTypeConnectionReady,
 		ConversationID: conversationID,
 		CreatedAt:      nowRFC3339(),
@@ -107,30 +110,34 @@ func (s *Server) handleBrowserWebSocket(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (s *Server) handleOpenClawWebSocket(w http.ResponseWriter, r *http.Request) {
-	if !s.authorized(r, s.cfg.OpenClawToken) {
-		http.Error(w, "invalid openclaw token", http.StatusUnauthorized)
+func (s *Server) handleChannelWebSocket(w http.ResponseWriter, r *http.Request) {
+	if !s.authorized(r, s.cfg.ChannelToken) {
+		http.Error(w, "invalid channel token", http.StatusUnauthorized)
+		return
+	}
+	if !s.validChannelID(r.URL.Query().Get("channel_id")) {
+		http.Error(w, "invalid channel id", http.StatusBadRequest)
 		return
 	}
 
 	conn, err := s.acceptWebSocket(w, r)
 	if err != nil {
-		s.logger.Printf("openclaw websocket accept failed: %v", err)
+		s.logger.Printf("channel websocket accept failed: %v", err)
 		return
 	}
 
 	client := NewWSClient(conn)
-	s.hub.AddOpenClaw(client)
+	s.hub.AddChannel(client)
 	defer func() {
-		s.hub.RemoveOpenClaw(client)
-		client.Close(websocket.StatusNormalClosure, "openclaw disconnected")
+		s.hub.RemoveChannel(client)
+		client.Close(websocket.StatusNormalClosure, "channel disconnected")
 	}()
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	go client.WriteLoop(ctx)
 
-	client.Send(mustJSON(OpenClawMessage{
+	client.Send(mustJSON(ChannelMessage{
 		Type:      MessageTypeConnectionReady,
 		CreatedAt: nowRFC3339(),
 	}))
@@ -140,7 +147,7 @@ func (s *Server) handleOpenClawWebSocket(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			return
 		}
-		if err := s.handleOpenClawFrame(data); err != nil {
+		if err := s.handleChannelFrame(data); err != nil {
 			client.Send(mustJSON(ErrorMessage{
 				Type:      MessageTypeError,
 				Code:      "BAD_REQUEST",
@@ -151,19 +158,23 @@ func (s *Server) handleOpenClawWebSocket(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (s *Server) handleOpenClawMessage(w http.ResponseWriter, r *http.Request) {
-	if !s.authorized(r, s.cfg.OpenClawToken) {
-		http.Error(w, "invalid openclaw token", http.StatusUnauthorized)
+func (s *Server) handleChannelMessage(w http.ResponseWriter, r *http.Request) {
+	if !s.authorized(r, s.cfg.ChannelToken) {
+		http.Error(w, "invalid channel token", http.StatusUnauthorized)
+		return
+	}
+	if r.PathValue("channelID") != channelID {
+		http.NotFound(w, r)
 		return
 	}
 
-	var message OpenClawMessage
+	var message ChannelMessage
 	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
 		http.Error(w, "invalid json body", http.StatusBadRequest)
 		return
 	}
 
-	// HTTP 回调和 OpenClaw WebSocket 回包最终都会归一化成浏览器侧的 assistant.message。
+	// HTTP 回调和 channel WebSocket 回包最终都会归一化成浏览器侧的 assistant.message。
 	assistant, err := normalizeAssistantMessage(message)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -195,7 +206,7 @@ func (s *Server) handleBrowserFrame(client *WSClient, conversationID string, dat
 		message.CreatedAt = nowRFC3339()
 	}
 
-	outbound := OpenClawMessage{
+	outbound := ChannelMessage{
 		Type:           MessageTypeUserMessage,
 		ID:             message.ID,
 		ConversationID: message.ConversationID,
@@ -203,15 +214,15 @@ func (s *Server) handleBrowserFrame(client *WSClient, conversationID string, dat
 		CreatedAt:      message.CreatedAt,
 		Metadata:       message.Metadata,
 	}
-	delivered := s.hub.BroadcastToOpenClaws(outbound)
+	delivered := s.hub.BroadcastToChannels(outbound)
 	if delivered == 0 {
-		// OpenClaw/plugin 侧未连接时，直接向浏览器回传聊天错误，避免用户发送后无限等待。
+		// channel 插件侧未连接时，直接向浏览器回传聊天错误，避免用户发送后无限等待。
 		client.Send(mustJSON(AssistantMessage{
 			Type:           MessageTypeAssistant,
 			MessageID:      fmt.Sprintf("error-%d", time.Now().UnixNano()),
 			ConversationID: message.ConversationID,
 			ReplyTo:        message.ID,
-			Text:           "OpenClaw 通道未连接。",
+			Text:           "ClawBridge channel 未连接。",
 			State:          StateError,
 			CreatedAt:      nowRFC3339(),
 		}))
@@ -219,13 +230,13 @@ func (s *Server) handleBrowserFrame(client *WSClient, conversationID string, dat
 	return nil
 }
 
-func (s *Server) handleOpenClawFrame(data []byte) error {
-	var message OpenClawMessage
+func (s *Server) handleChannelFrame(data []byte) error {
+	var message ChannelMessage
 	if err := json.Unmarshal(data, &message); err != nil {
 		return fmt.Errorf("invalid json frame")
 	}
 	if message.Type != MessageTypeAssistant {
-		return fmt.Errorf("unsupported openclaw message type %q", message.Type)
+		return fmt.Errorf("unsupported channel message type %q", message.Type)
 	}
 
 	assistant, err := normalizeAssistantMessage(message)
@@ -236,7 +247,7 @@ func (s *Server) handleOpenClawFrame(data []byte) error {
 	return nil
 }
 
-func normalizeAssistantMessage(message OpenClawMessage) (AssistantMessage, error) {
+func normalizeAssistantMessage(message ChannelMessage) (AssistantMessage, error) {
 	if strings.TrimSpace(message.Text) == "" && message.State != StateError {
 		return AssistantMessage{}, errors.New("message text is required")
 	}
@@ -260,7 +271,7 @@ func normalizeAssistantMessage(message OpenClawMessage) (AssistantMessage, error
 		messageID = strings.TrimSpace(message.ID)
 	}
 	if messageID == "" {
-		messageID = fmt.Sprintf("openclaw-%d", time.Now().UnixNano())
+		messageID = fmt.Sprintf("channel-%d", time.Now().UnixNano())
 	}
 
 	return AssistantMessage{
@@ -271,6 +282,7 @@ func normalizeAssistantMessage(message OpenClawMessage) (AssistantMessage, error
 		Text:           message.Text,
 		State:          state,
 		CreatedAt:      coalesce(message.CreatedAt, nowRFC3339()),
+		Metadata:       message.Metadata,
 	}, nil
 }
 
@@ -293,8 +305,12 @@ func (s *Server) authorized(r *http.Request, expectedToken string) bool {
 	return tokenFromRequest(r) == expectedToken
 }
 
+func (s *Server) validChannelID(value string) bool {
+	return strings.TrimSpace(value) == channelID
+}
+
 func tokenFromRequest(r *http.Request) string {
-	// 查询参数 token 用于浏览器 WebSocket 连接；Authorization 用于 OpenClaw 侧服务间 HTTP 回调。
+	// 查询参数 token 用于浏览器和 channel WebSocket 连接；Authorization 用于 channel 侧服务间 HTTP 回调。
 	if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
 		return token
 	}

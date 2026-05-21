@@ -16,9 +16,8 @@ const channelAccountProperties = {
   name: { type: "string" },
   enabled: { type: "boolean" },
   serverUrl: { type: "string", format: "uri" },
-  webSocketUrl: { type: "string", format: "uri" },
-  botId: { type: "string" },
-  botToken: { type: "string" },
+  wsUrl: { type: "string", format: "uri" },
+  token: { type: "string" },
   agentId: { type: "string" },
   defaultTo: { type: "string" },
   allowFrom: { type: "array", items: { type: "string" } },
@@ -46,15 +45,15 @@ export const clawBridgeConfigSchema: ChannelConfigSchema = {
   },
   uiHints: {
     serverUrl: {
-      label: "ClawCore Server URL",
+      label: "IM Server URL",
       placeholder: "https://example.com",
     },
-    webSocketUrl: {
-      label: "ClawCore WebSocket URL",
-      placeholder: "wss://example.com/ws/openclaw",
+    wsUrl: {
+      label: "IM WebSocket URL",
+      placeholder: "wss://example.com/ws/channel",
     },
-    botToken: {
-      label: "Bot token",
+    token: {
+      label: "User token",
       sensitive: true,
     },
   },
@@ -81,19 +80,17 @@ export function resolveClawBridgeAccount(params: {
   const accountConfig = channel.accounts?.[accountId] ?? {};
   const merged = mergeAccountConfig(channel, accountConfig);
   const serverUrl = normalizeServerUrl(merged.serverUrl);
-  const webSocketUrl = normalizeWebSocketUrl(merged.webSocketUrl, serverUrl);
-  const botToken = merged.botToken?.trim() ?? "";
-  const botId = merged.botId?.trim() || "clawbridge";
+  const wsUrl = normalizeWsUrl(merged.wsUrl, serverUrl);
+  const token = merged.token?.trim() ?? "";
 
   return {
     accountId,
     name: merged.name?.trim() || undefined,
     enabled: channel.enabled !== false && merged.enabled !== false,
-    configured: Boolean(serverUrl && webSocketUrl && botToken),
+    configured: Boolean(serverUrl && wsUrl && token),
     serverUrl,
-    webSocketUrl,
-    botId,
-    botToken,
+    wsUrl,
+    token,
     agentId: merged.agentId?.trim() || undefined,
     defaultTo: merged.defaultTo?.trim() || DEFAULT_CONVERSATION_ID,
     allowFrom: normalizeAllowFrom(merged.allowFrom),
@@ -109,9 +106,8 @@ function mergeAccountConfig(
     name: account.name ?? channel.name,
     enabled: account.enabled ?? channel.enabled,
     serverUrl: account.serverUrl ?? channel.serverUrl,
-    webSocketUrl: account.webSocketUrl ?? channel.webSocketUrl,
-    botId: account.botId ?? channel.botId,
-    botToken: account.botToken ?? channel.botToken,
+    wsUrl: account.wsUrl ?? channel.wsUrl,
+    token: account.token ?? channel.token,
     agentId: account.agentId ?? channel.agentId,
     defaultTo: account.defaultTo ?? channel.defaultTo,
     allowFrom: account.allowFrom ?? channel.allowFrom,
@@ -132,7 +128,7 @@ function normalizeServerUrl(value?: string): string {
   return value?.trim().replace(/\/+$/, "") ?? "";
 }
 
-function normalizeWebSocketUrl(value: string | undefined, serverUrl: string): string {
+function normalizeWsUrl(value: string | undefined, serverUrl: string): string {
   const explicit = value?.trim();
   if (explicit) {
     return explicit;
@@ -144,7 +140,7 @@ function normalizeWebSocketUrl(value: string | undefined, serverUrl: string): st
   // 缺省 WebSocket 地址由 Server URL 推导，方便 ClawPro 只维护一个公网域名。
   const url = new URL(serverUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  url.pathname = "/ws/openclaw";
+  url.pathname = "/ws/channel";
   url.search = "";
   url.hash = "";
   return url.toString();

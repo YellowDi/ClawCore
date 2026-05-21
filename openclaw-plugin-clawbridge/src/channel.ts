@@ -1,9 +1,9 @@
 import {
   buildChannelOutboundSessionRoute,
+  type ChannelPlugin,
   createChatChannelPlugin,
 } from "openclaw/plugin-sdk/channel-core";
-import { defineChannelMessageAdapter } from "openclaw/plugin-sdk/channel-message";
-import type { ChannelPlugin } from "openclaw/plugin-sdk/core";
+import { jsonResult, readStringParam } from "openclaw/plugin-sdk/channel-actions";
 
 import { CHANNEL_ID, CHANNEL_LABEL } from "./constants.js";
 import {
@@ -13,46 +13,12 @@ import {
   resolveDefaultClawBridgeAccountId,
 } from "./config.js";
 import { startClawBridgeGatewayAccount } from "./gateway.js";
-import {
-  createClawBridgeMessageReceipt,
-  sendClawBridgeText,
-} from "./outbound.js";
+import { sendClawBridgeText } from "./outbound.js";
 import {
   looksLikeClawBridgeTarget,
   normalizeClawBridgeTarget,
 } from "./target.js";
 import type { ClawBridgeCoreConfig, ResolvedClawBridgeAccount } from "./types.js";
-
-// message adapter 负责让 OpenClaw 共享 message 工具能把回复投递到 ClawCore。
-const clawBridgeMessageAdapter = defineChannelMessageAdapter({
-  id: CHANNEL_ID,
-  durableFinal: {
-    capabilities: {
-      text: true,
-      replyTo: true,
-      messageSendingHooks: true,
-    },
-  },
-  send: {
-    text: async (ctx) => {
-      const result = await sendClawBridgeText({
-        cfg: ctx.cfg,
-        accountId: ctx.accountId,
-        to: ctx.to,
-        text: ctx.text,
-        replyToId: ctx.replyToId,
-      });
-      return {
-        messageId: result.messageId,
-        receipt: createClawBridgeMessageReceipt({
-          messageId: result.messageId,
-          conversationId: result.to,
-          replyToId: ctx.replyToId,
-        }),
-      };
-    },
-  },
-});
 
 /** OpenClaw 原生 channel 插件定义，注册配置、路由、网关和出站投递能力。 */
 export const clawBridgePlugin: ChannelPlugin<ResolvedClawBridgeAccount> =
@@ -63,10 +29,10 @@ export const clawBridgePlugin: ChannelPlugin<ResolvedClawBridgeAccount> =
         id: CHANNEL_ID,
         label: CHANNEL_LABEL,
         selectionLabel: CHANNEL_LABEL,
-        detailLabel: "ClawCore Bridge",
+        detailLabel: "ClawPro IM Channel",
         docsPath: "/channels/clawbridge",
         docsLabel: "clawbridge",
-        blurb: "ClawCore WebSocket bridge for ClawPro custom channels.",
+        blurb: "ClawPro IM channel over ClawCore serverUrl/wsUrl.",
         markdownCapable: true,
         preferSessionLookupForAnnounceTarget: true,
         order: 90,
@@ -127,7 +93,6 @@ export const clawBridgePlugin: ChannelPlugin<ResolvedClawBridgeAccount> =
         }),
       },
       messaging: {
-        targetPrefixes: ["clawbridge", "clawcore"],
         normalizeTarget: normalizeClawBridgeTarget,
         parseExplicitTarget: ({ raw }) => ({
           to: normalizeClawBridgeTarget(raw),
@@ -166,7 +131,56 @@ export const clawBridgePlugin: ChannelPlugin<ResolvedClawBridgeAccount> =
       gateway: {
         startAccount: startClawBridgeGatewayAccount,
       },
-      message: clawBridgeMessageAdapter,
+      actions: {
+        describeMessageTool: ({ cfg, accountId }) => {
+          const account = resolveClawBridgeAccount({
+            cfg: cfg as ClawBridgeCoreConfig,
+            accountId,
+          });
+          return account.configured && account.enabled
+            ? {
+                actions: ["send"],
+              }
+            : null;
+        },
+        extractToolSend: ({ args }) => {
+          const action = typeof args.action === "string" ? args.action.trim() : "";
+          if (action !== "send" && action !== "sendMessage") {
+            return null;
+          }
+          const to = typeof args.to === "string" ? args.to.trim() : "";
+          if (!to) {
+            return null;
+          }
+          const accountId = typeof args.accountId === "string" ? args.accountId.trim() : undefined;
+          const threadId = typeof args.threadId === "string" ? args.threadId.trim() : undefined;
+          return {
+            to: normalizeClawBridgeTarget(to),
+            accountId,
+            threadId,
+          };
+        },
+        handleAction: async ({ action, params, cfg, accountId }) => {
+          if (action !== "send") {
+            throw new Error(`ClawBridge does not support message action "${action}"`);
+          }
+          const to = readStringParam(params, "to", { required: true });
+          const text = readStringParam(params, "message", { required: true, allowEmpty: false });
+          const replyToId = readStringParam(params, "replyTo", { allowEmpty: false });
+          const result = await sendClawBridgeText({
+            cfg,
+            accountId,
+            to,
+            text,
+            replyToId,
+          });
+          return jsonResult({
+            ok: true,
+            to: result.to,
+            messageId: result.messageId,
+          });
+        },
+      },
     },
     outbound: {
       base: { deliveryMode: "direct" },

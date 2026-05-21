@@ -28,12 +28,13 @@ type message struct {
 }
 
 func main() {
-	wsURL := flag.String("ws", envOrDefault("CLAWCORE_OPENCLAW_WS_URL", "ws://127.0.0.1:8080/ws/openclaw"), "ClawCore OpenClaw WebSocket URL")
+	wsURL := flag.String("ws", envOrDefault("CLAWCORE_CHANNEL_WS_URL", "ws://127.0.0.1:8080/ws/channel"), "ClawCore channel WebSocket URL")
 	httpURL := flag.String("http", envOrDefault("CLAWCORE_HTTP_URL", "http://127.0.0.1:8080"), "ClawCore HTTP base URL")
-	token := flag.String("token", os.Getenv("CLAWCORE_OPENCLAW_TOKEN"), "OpenClaw token")
+	token := flag.String("token", os.Getenv("CLAWCORE_CHANNEL_TOKEN"), "channel token")
+	accountID := flag.String("account", envOrDefault("CLAWCORE_CHANNEL_ACCOUNT_ID", "default"), "channel account ID")
 	flag.Parse()
 
-	endpoint, err := withToken(*wsURL, *token)
+	endpoint, err := withChannelQuery(*wsURL, *accountID, *token)
 	if err != nil {
 		log.Fatalf("invalid ws url: %v", err)
 	}
@@ -47,7 +48,7 @@ func main() {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "mock stopped")
 
-	log.Printf("mock OpenClaw connected to %s", endpoint)
+	log.Printf("mock channel connected to %s", endpoint)
 	for {
 		_, data, err := conn.Read(ctx)
 		if err != nil {
@@ -63,12 +64,12 @@ func main() {
 			continue
 		}
 
-		// 模拟客户端刻意使用与未来真实通道插件一致的 HTTP 回调接口返回消息。
+		// 模拟客户端刻意使用与真实 channel 插件一致的 HTTP 回调接口返回消息。
 		reply := message{
 			ConversationID: incoming.ConversationID,
 			ReplyTo:        incoming.ID,
 			MessageID:      fmt.Sprintf("mock-%d", time.Now().UnixNano()),
-			Text:           "模拟 OpenClaw 回复：" + incoming.Text,
+			Text:           "模拟 channel 回复：" + incoming.Text,
 			State:          "final",
 		}
 		if err := postReply(ctx, *httpURL, *token, reply); err != nil {
@@ -85,7 +86,7 @@ func postReply(ctx context.Context, baseURL, token string, payload message) erro
 		return err
 	}
 
-	endpoint := strings.TrimRight(baseURL, "/") + "/api/openclaw/messages"
+	endpoint := strings.TrimRight(baseURL, "/") + "/api/channels/clawbridge/messages"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -106,16 +107,20 @@ func postReply(ctx context.Context, baseURL, token string, payload message) erro
 	return nil
 }
 
-func withToken(rawURL, token string) (string, error) {
+func withChannelQuery(rawURL, accountID, token string) (string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", err
 	}
-	if token != "" {
-		q := u.Query()
-		q.Set("token", token)
-		u.RawQuery = q.Encode()
+	q := u.Query()
+	q.Set("channel_id", "clawbridge")
+	if strings.TrimSpace(accountID) != "" {
+		q.Set("account_id", strings.TrimSpace(accountID))
 	}
+	if token != "" {
+		q.Set("token", token)
+	}
+	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
 

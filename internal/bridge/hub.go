@@ -5,18 +5,18 @@ import (
 	"sync"
 )
 
-// Hub 维护当前在线的浏览器连接和 OpenClaw 侧连接，并负责消息广播。
+// Hub 维护当前在线的浏览器连接和 channel 侧连接，并负责消息广播。
 type Hub struct {
-	mu        sync.RWMutex
-	browsers  map[string]map[*WSClient]struct{}
-	openclaws map[*WSClient]struct{}
+	mu       sync.RWMutex
+	browsers map[string]map[*WSClient]struct{}
+	channels map[*WSClient]struct{}
 }
 
 // NewHub 创建内存连接中心。它不保存持久状态，客户端重连后重新建立会话视图。
 func NewHub() *Hub {
 	return &Hub{
-		browsers:  make(map[string]map[*WSClient]struct{}),
-		openclaws: make(map[*WSClient]struct{}),
+		browsers: make(map[string]map[*WSClient]struct{}),
+		channels: make(map[*WSClient]struct{}),
 	}
 }
 
@@ -48,18 +48,18 @@ func (h *Hub) RemoveBrowser(conversationID string, client *WSClient) {
 	}
 }
 
-// AddOpenClaw 注册一个 OpenClaw 侧连接。
-func (h *Hub) AddOpenClaw(client *WSClient) {
+// AddChannel 注册一个 channel 侧连接。
+func (h *Hub) AddChannel(client *WSClient) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.openclaws[client] = struct{}{}
+	h.channels[client] = struct{}{}
 }
 
-// RemoveOpenClaw 移除一个 OpenClaw 侧连接。
-func (h *Hub) RemoveOpenClaw(client *WSClient) {
+// RemoveChannel 移除一个 channel 侧连接。
+func (h *Hub) RemoveChannel(client *WSClient) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	delete(h.openclaws, client)
+	delete(h.channels, client)
 }
 
 // BroadcastToBrowsers 向指定会话下的所有浏览器连接广播消息。
@@ -83,16 +83,16 @@ func (h *Hub) BroadcastToBrowsers(conversationID string, payload any) int {
 	return delivered
 }
 
-// BroadcastToOpenClaws 向所有 OpenClaw 侧连接广播消息。
-func (h *Hub) BroadcastToOpenClaws(payload any) int {
+// BroadcastToChannels 向所有 channel 侧连接广播消息。
+func (h *Hub) BroadcastToChannels(payload any) int {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return 0
 	}
 
 	h.mu.RLock()
-	// 当前所有 OpenClaw 连接共用一个广播组；真实插件后续可按机器人或账号元数据路由。
-	clients := cloneClients(h.openclaws)
+	// 当前所有 channel 连接共用一个广播组；真实插件后续可按账号元数据路由。
+	clients := cloneClients(h.channels)
 	h.mu.RUnlock()
 
 	delivered := 0

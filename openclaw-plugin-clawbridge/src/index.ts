@@ -7,7 +7,7 @@ import { setClawBridgeRuntime } from "./runtime.js";
 export default defineChannelPluginEntry({
   id: "clawbridge",
   name: "ClawBridge",
-  description: "ClawCore bridge channel plugin for OpenClaw.",
+  description: "ClawPro IM channel plugin for OpenClaw.",
   plugin: clawBridgePlugin,
   configSchema: clawBridgeConfigSchema,
   setRuntime: setClawBridgeRuntime,

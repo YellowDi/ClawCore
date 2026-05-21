@@ -1,5 +1,5 @@
 import { createPluginRuntimeStore } from "openclaw/plugin-sdk/runtime-store";
-import type { PluginRuntime } from "openclaw/plugin-sdk/core";
+import type { PluginRuntime } from "openclaw/plugin-sdk/channel-core";
 
 const store = createPluginRuntimeStore<PluginRuntime>({
   pluginId: "clawbridge",

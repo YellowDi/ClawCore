@@ -1,24 +1,11 @@
 {
   "id": "clawbridge",
   "name": "ClawBridge",
-  "description": "Connects OpenClaw to ClawCore and ClawBridge through a custom channel.",
+  "description": "Connects OpenClaw to ClawPro IM and ClawBridge through a native channel.",
   "version": "0.1.0",
-  "activation": {
-    "onStartup": false
-  },
   "channels": [
     "clawbridge"
   ],
-  "channelEnvVars": {
-    "clawbridge": [
-      "CLAWCORE_OPENCLAW_TOKEN"
-    ]
-  },
-  "configSchema": {
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {}
-  },
   "channelConfigs": {
     "clawbridge": {
       "label": "ClawBridge",
@@ -38,14 +25,11 @@
             "type": "string",
             "format": "uri"
           },
-          "webSocketUrl": {
+          "wsUrl": {
             "type": "string",
             "format": "uri"
           },
-          "botId": {
-            "type": "string"
-          },
-          "botToken": {
+          "token": {
             "type": "string"
           },
           "agentId": {
@@ -84,14 +68,11 @@
                   "type": "string",
                   "format": "uri"
                 },
-                "webSocketUrl": {
+                "wsUrl": {
                   "type": "string",
                   "format": "uri"
                 },
-                "botId": {
-                  "type": "string"
-                },
-                "botToken": {
+                "token": {
                   "type": "string"
                 },
                 "agentId": {
@@ -121,15 +102,15 @@
       },
       "uiHints": {
         "serverUrl": {
-          "label": "ClawCore Server URL",
+          "label": "IM Server URL",
           "placeholder": "https://example.com"
         },
-        "webSocketUrl": {
-          "label": "ClawCore WebSocket URL",
-          "placeholder": "wss://example.com/ws/openclaw"
+        "wsUrl": {
+          "label": "IM WebSocket URL",
+          "placeholder": "wss://example.com/ws/channel"
         },
-        "botToken": {
-          "label": "Bot token",
+        "token": {
+          "label": "User token",
           "sensitive": true
         }
       }
