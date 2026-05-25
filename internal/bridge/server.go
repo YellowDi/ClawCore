@@ -2,6 +2,8 @@ package bridge
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +17,7 @@ import (
 
 const (
 	defaultConversationID = "main"
+	conversationIDPrefix  = "conv-"
 	channelID             = "clawbridge"
 )
 
@@ -64,10 +67,7 @@ func (s *Server) handleBrowserWebSocket(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	conversationID := strings.TrimSpace(r.URL.Query().Get("conversation_id"))
-	if conversationID == "" {
-		conversationID = defaultConversationID
-	}
+	conversationID := newConversationID()
 
 	conn, err := s.acceptWebSocket(w, r)
 	if err != nil {
@@ -196,9 +196,7 @@ func (s *Server) handleBrowserFrame(client *WSClient, conversationID string, dat
 	if strings.TrimSpace(message.Text) == "" {
 		return fmt.Errorf("message text is required")
 	}
-	if strings.TrimSpace(message.ConversationID) == "" {
-		message.ConversationID = conversationID
-	}
+	message.ConversationID = conversationID
 	if message.ID == "" {
 		message.ID = fmt.Sprintf("browser-%d", time.Now().UnixNano())
 	}
@@ -284,6 +282,14 @@ func normalizeAssistantMessage(message ChannelMessage) (AssistantMessage, error)
 		CreatedAt:      coalesce(message.CreatedAt, nowRFC3339()),
 		Metadata:       message.Metadata,
 	}, nil
+}
+
+func newConversationID() string {
+	var bytes [16]byte
+	if _, err := rand.Read(bytes[:]); err == nil {
+		return conversationIDPrefix + hex.EncodeToString(bytes[:])
+	}
+	return fmt.Sprintf("%s%d", conversationIDPrefix, time.Now().UnixNano())
 }
 
 func (s *Server) acceptWebSocket(w http.ResponseWriter, r *http.Request) (*websocket.Conn, error) {

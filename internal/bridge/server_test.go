@@ -64,13 +64,10 @@ func TestChannelHTTPBroadcastsToBrowser(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "test done")
 
-	_, _, err = conn.Read(ctx) // 读取 connection.ready
-	if err != nil {
-		t.Fatal(err)
-	}
+	ready := readConnectionReady(t, ctx, conn)
 
 	payload := ChannelMessage{
-		ConversationID: "main",
+		ConversationID: ready.ConversationID,
 		ReplyTo:        "user-1",
 		MessageID:      "assistant-1",
 		Text:           "hello from channel",
@@ -110,6 +107,9 @@ func TestChannelHTTPBroadcastsToBrowser(t *testing.T) {
 	if message.Type != MessageTypeAssistant || message.Text != "hello from channel" {
 		t.Fatalf("unexpected browser message: %#v", message)
 	}
+	if message.ConversationID != ready.ConversationID {
+		t.Fatalf("expected conversation id %q, got %q", ready.ConversationID, message.ConversationID)
+	}
 }
 
 func TestBrowserMessageRoutesToChannel(t *testing.T) {
@@ -141,10 +141,7 @@ func TestBrowserMessageRoutesToChannel(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer browserConn.Close(websocket.StatusNormalClosure, "test done")
-	_, _, err = browserConn.Read(ctx) // 读取 connection.ready
-	if err != nil {
-		t.Fatal(err)
-	}
+	ready := readConnectionReady(t, ctx, browserConn)
 
 	outbound := BrowserInboundMessage{
 		Type:           MessageTypeUserMessage,
@@ -172,4 +169,59 @@ func TestBrowserMessageRoutesToChannel(t *testing.T) {
 	if routed.Type != MessageTypeUserMessage || routed.Text != "ping" || routed.ID != "user-1" {
 		t.Fatalf("unexpected routed message: %#v", routed)
 	}
+	if routed.ConversationID != ready.ConversationID {
+		t.Fatalf("expected connection conversation id %q, got %q", ready.ConversationID, routed.ConversationID)
+	}
+}
+
+func TestBrowserConnectionsGetUniqueConversationIDs(t *testing.T) {
+	server := NewServer(Config{BridgeToken: "bridge", AllowedOrigins: []string{"*"}}, nil)
+	ts := httptest.NewServer(server.Handler())
+	defer ts.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/browser?conversation_id=main&token=bridge"
+	firstConn, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer firstConn.Close(websocket.StatusNormalClosure, "test done")
+	firstReady := readConnectionReady(t, ctx, firstConn)
+
+	secondConn, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer secondConn.Close(websocket.StatusNormalClosure, "test done")
+	secondReady := readConnectionReady(t, ctx, secondConn)
+
+	if firstReady.ConversationID == "" || secondReady.ConversationID == "" {
+		t.Fatalf("expected generated conversation ids, got %q and %q", firstReady.ConversationID, secondReady.ConversationID)
+	}
+	if firstReady.ConversationID == "main" || secondReady.ConversationID == "main" {
+		t.Fatalf("expected generated conversation ids, got %q and %q", firstReady.ConversationID, secondReady.ConversationID)
+	}
+	if firstReady.ConversationID == secondReady.ConversationID {
+		t.Fatalf("expected unique conversation ids, got %q", firstReady.ConversationID)
+	}
+}
+
+func readConnectionReady(t *testing.T, ctx context.Context, conn *websocket.Conn) ChannelMessage {
+	t.Helper()
+
+	_, data, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var message ChannelMessage
+	if err := json.Unmarshal(data, &message); err != nil {
+		t.Fatal(err)
+	}
+	if message.Type != MessageTypeConnectionReady {
+		t.Fatalf("expected connection.ready, got %#v", message)
+	}
+	return message
 }

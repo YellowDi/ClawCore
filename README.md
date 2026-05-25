@@ -33,7 +33,7 @@ CLAWCORE_ALLOWED_ORIGINS=http://127.0.0.1:5173,http://localhost:5173
 ## 接口
 
 - `GET /healthz`
-- `GET /ws/browser?conversation_id=main&token=<CLAWCORE_BRIDGE_TOKEN>`
+- `GET /ws/browser?token=<CLAWCORE_BRIDGE_TOKEN>`
 - `GET /ws/channel?channel_id=clawbridge&account_id=default&token=<CLAWCORE_CHANNEL_TOKEN>`
 - `POST /api/channels/clawbridge/messages`
 
@@ -41,7 +41,7 @@ Channel HTTP reply example:
 
 ```json
 {
-  "conversationId": "main",
+  "conversationId": "conv-...",
   "replyTo": "user-message-id",
   "messageId": "assistant-message-id",
   "text": "hello",
@@ -106,8 +106,10 @@ CLAWCORE_CHANNEL_TOKEN=dev-channel go run ./cmd/clawmock
 然后让 ClawBridge 连接：
 
 ```text
-ws://127.0.0.1:8080/ws/browser?conversation_id=main&token=dev-bridge
+ws://127.0.0.1:8080/ws/browser?token=dev-bridge
 ```
+
+浏览器 WebSocket 每次连接都会由 ClawCore 分配新的 `conversationId`，并在 `connection.ready` 帧里返回；ClawBridge 后续展示和消息关联应使用这个 id。
 
 ## ClawPro 自定义通道
 
