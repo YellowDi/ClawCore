@@ -5,14 +5,20 @@ export type ClawBridgeAccountConfig = {
     serverUrl?: string;
     wsUrl?: string;
     token?: string;
+    accessKey?: string;
+    secretKey?: string;
     agentId?: string;
     defaultTo?: string;
     allowFrom?: string[];
     reconnectMs?: number;
+    [key: string]: unknown;
 };
-export type ClawBridgeConfig = ClawBridgeAccountConfig & {
+export type ClawBridgeConfig = {
+    name?: string;
+    enabled?: boolean;
     accounts?: Record<string, ClawBridgeAccountConfig | undefined>;
     defaultAccount?: string;
+    [key: string]: unknown;
 };
 export type ResolvedClawBridgeAccount = {
     accountId: string;

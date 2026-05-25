@@ -3,6 +3,11 @@
   "name": "ClawBridge",
   "description": "Connects OpenClaw to ClawPro IM and ClawBridge through a native channel.",
   "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
   "channels": [
     "clawbridge"
   ],
@@ -21,34 +26,6 @@
           "enabled": {
             "type": "boolean"
           },
-          "serverUrl": {
-            "type": "string",
-            "format": "uri"
-          },
-          "wsUrl": {
-            "type": "string",
-            "format": "uri"
-          },
-          "token": {
-            "type": "string"
-          },
-          "agentId": {
-            "type": "string"
-          },
-          "defaultTo": {
-            "type": "string"
-          },
-          "allowFrom": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "reconnectMs": {
-            "type": "integer",
-            "minimum": 100,
-            "maximum": 60000
-          },
           "accounts": {
             "type": "object",
             "propertyNames": {
@@ -56,7 +33,7 @@
             },
             "additionalProperties": {
               "type": "object",
-              "additionalProperties": false,
+              "additionalProperties": true,
               "properties": {
                 "name": {
                   "type": "string"
@@ -73,6 +50,12 @@
                   "format": "uri"
                 },
                 "token": {
+                  "type": "string"
+                },
+                "accessKey": {
+                  "type": "string"
+                },
+                "secretKey": {
                   "type": "string"
                 },
                 "agentId": {
@@ -111,6 +94,14 @@
         },
         "token": {
           "label": "User token",
+          "sensitive": true
+        },
+        "accessKey": {
+          "label": "Access key",
+          "sensitive": true
+        },
+        "secretKey": {
+          "label": "Secret key",
           "sensitive": true
         }
       }

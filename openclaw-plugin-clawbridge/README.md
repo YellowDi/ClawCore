@@ -20,18 +20,22 @@ npm run build
   "channels": {
     "clawbridge": {
       "enabled": true,
-      "serverUrl": "https://<domain>",
-      "wsUrl": "wss://<domain>/ws/channel",
-      "token": "<same-as-CLAWCORE_CHANNEL_TOKEN>",
-      "agentId": "default",
-      "defaultTo": "main",
-      "allowFrom": ["*"],
-      "reconnectMs": 1500
+      "accounts": {
+        "default": {
+          "serverUrl": "https://<domain>",
+          "wsUrl": "wss://<domain>/ws/channel",
+          "token": "<same-as-CLAWCORE_CHANNEL_TOKEN>",
+          "agentId": "default",
+          "defaultTo": "main",
+          "allowFrom": ["*"],
+          "reconnectMs": 1500
+        }
+      }
     }
   }
 }
 ```
 
-Channel ID 固定为 `clawbridge`，同时用于插件 id、manifest `channels[]`、配置路径 `channels.clawbridge` 和运行时路由 channel。
+Channel ID 固定为 `clawbridge`，同时用于插件 id、manifest `channels[]`、配置路径 `channels.clawbridge` 和运行时路由 channel。连接参数必须放在 `channels.clawbridge.accounts.<accountId>` 下；`token` 是 ClawCore 当前使用的凭证字段，`accessKey` 可作为 token 兼容别名。
 
 ClawCore 本地运行 HTTP 即可，公网 TLS/WSS 由反向代理或隧道负责终止。

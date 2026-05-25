@@ -5,6 +5,8 @@ const channelAccountProperties = {
     serverUrl: { type: "string", format: "uri" },
     wsUrl: { type: "string", format: "uri" },
     token: { type: "string" },
+    accessKey: { type: "string" },
+    secretKey: { type: "string" },
     agentId: { type: "string" },
     defaultTo: { type: "string" },
     allowFrom: { type: "array", items: { type: "string" } },
@@ -16,13 +18,14 @@ export const clawBridgeConfigSchema = {
         type: "object",
         additionalProperties: false,
         properties: {
-            ...channelAccountProperties,
+            name: { type: "string" },
+            enabled: { type: "boolean" },
             accounts: {
                 type: "object",
                 propertyNames: { type: "string" },
                 additionalProperties: {
                     type: "object",
-                    additionalProperties: false,
+                    additionalProperties: true,
                     properties: channelAccountProperties,
                 },
             },
@@ -40,6 +43,14 @@ export const clawBridgeConfigSchema = {
         },
         token: {
             label: "User token",
+            sensitive: true,
+        },
+        accessKey: {
+            label: "Access key",
+            sensitive: true,
+        },
+        secretKey: {
+            label: "Secret key",
             sensitive: true,
         },
     },
@@ -61,7 +72,7 @@ export function resolveClawBridgeAccount(params) {
     const merged = mergeAccountConfig(channel, accountConfig);
     const serverUrl = normalizeServerUrl(merged.serverUrl);
     const wsUrl = normalizeWsUrl(merged.wsUrl, serverUrl);
-    const token = merged.token?.trim() ?? "";
+    const token = normalizeCredential(merged.token) || normalizeCredential(merged.accessKey);
     return {
         accountId,
         name: merged.name?.trim() || undefined,
@@ -78,15 +89,9 @@ export function resolveClawBridgeAccount(params) {
 }
 function mergeAccountConfig(channel, account) {
     return {
+        ...account,
         name: account.name ?? channel.name,
         enabled: account.enabled ?? channel.enabled,
-        serverUrl: account.serverUrl ?? channel.serverUrl,
-        wsUrl: account.wsUrl ?? channel.wsUrl,
-        token: account.token ?? channel.token,
-        agentId: account.agentId ?? channel.agentId,
-        defaultTo: account.defaultTo ?? channel.defaultTo,
-        allowFrom: account.allowFrom ?? channel.allowFrom,
-        reconnectMs: account.reconnectMs ?? channel.reconnectMs,
     };
 }
 function normalizeAccountId(value) {
@@ -98,6 +103,9 @@ function normalizeAllowFrom(value) {
 }
 function normalizeServerUrl(value) {
     return value?.trim().replace(/\/+$/, "") ?? "";
+}
+function normalizeCredential(value) {
+    return typeof value === "string" ? value.trim() : "";
 }
 function normalizeWsUrl(value, serverUrl) {
     const explicit = value?.trim();
